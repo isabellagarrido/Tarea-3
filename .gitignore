@@ -1,0 +1,8 @@
+# Ignore everything
+*
+
+# But not these files
+!asm.s43
+
+# Even if they are in a subdirectory
+!*/

@@ -16,7 +16,10 @@
 
         ORG     0x01C00                 ; Start of RAM
 
+        ORG     01C00h                  
+ 
 pushCount dw    0                       ;Counter for how many times button S1 is pressed
+
 ;------------------------------------------------------------------------------
 ; We need counters for the following delays:
 ; * Quarter Seconds     (2 eight cycles)
@@ -239,10 +242,10 @@ TIMER_A0_ISR:
                                         ; CCIFG automatically reset when entering
               	                        ; the ISR so no need to clear the flag
         mov #0, intsCounter
-        jmp fin
+        jmp fin1
 noToggle:
         inc intsCounter
-fin:
+fin1:
         reti
 ;------------------------------------------------------------------------------
 ;------------------------------------------------------------------------------
@@ -260,27 +263,26 @@ PORT1_ISR:
         bic.b   #00000010b, &P1IFG      ; Clear interrupt flag and check 
         cmp     #1, pushCount           ; if it is the first time S1 is pressed.
         jeq     displayIntroLoop        ; If not, go to light on green LED
-        bis.b   #10000000b,&P9OUT       ; light on the green LED
+
+        bis.b   #00000001b,&P1OUT       ; turn on red LED and 
         jmp     fin                     ; go to end of ISR
 
 displayIntroLoop:
-        bis.b   #00000001b,&P1OUT       ; turn on red LED and
-        bis.b   #10000000b,&P9OUT       ; turn on the green LED
-        CALL #introductoryLoop
-        ; here we would start to display the first introductory loop
-        ; to the game
-        ;using the timer
-        ; (subroutine doesnt exist yet)
+        bis.b   #10000000b,&P9OUT       ; light on the green LED
+        CALL    #introductoryLoop
 
         
 fin:    inc     pushCount               ; Increment the pushes counter
         reti
 ;------------------------------------------------------------------------------
+        ; here we would start to display the first introductory loop
+        ; to the game
+        ;using the timer
+        ; (subroutine doesnt exist yet)
 introductoryLoop:
         MOV.w   #record, R10
         CALL    #SUB_displayStringOnLCD
         ret
-;------------------------------------------------------------------------------
 
 
         END

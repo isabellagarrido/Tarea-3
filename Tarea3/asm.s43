@@ -57,6 +57,9 @@ player          DB      15, 11, 0, 24, 4, 17
 mode            DB      12, 14, 3, 4, 26, 26    ; NOTE: To make Y/N appear after mode
                                                 ; edit @mode+5 (the final position)
 
+;                       T   P
+modeValues      DB      19, 15
+
 s2clr           DB      18, 32, 2, 11, 17, 26
 perdio          DB      15, 4, 17, 3, 8, 14
 gano            DB      6, 0, 13, 14, 26, 26
@@ -69,8 +72,8 @@ resultPage      DW      perdio, gano                                            
 
 
 
-;                       0       2           4         6     8       10           12
-pages           DW      kasino, recordPage, namePage, mode, number, resultPage, s2clr   ; Indexed by R4 (R4 must be even)
+;                       0       2           4         6     10      12          14
+pages           DW      kasino, recordPage, namePage, mode, number, resultPage, s2clr   ; Indexed by R4 * 2
 
 ; LCD Offsets
 LCD_offsets db 9, 5, 3, 18, 14, 7
@@ -82,6 +85,9 @@ S2              db      00000010B
 ; Timer Mode Counts (seconds)
 ;                       1/8   1/4   1/2  1   2   5
 countsNeeded    DB      1,    2,    4,   8, 16, 40
+
+; Game timer modes      2  2  1  1/2  1/4  1/8
+proTimerModes   DB      4, 4, 3, 2,   1,   0
 
 ; Game number (0 = 30 ... 9 = 39)
 number          DB      30, 30, 30, 30, 30, 30
@@ -300,20 +306,103 @@ displayLoop:
         
 ;------------------------------------------------------------------------------
 SUB_S1Action:
-        ; TODO: implement
+        ; TODO: Set timer mode for state transitions
         CMP     #0, R4
         JEQ     moveToIntroLoop
+        
+        CMP     #2, R4
+        JEQ     moveToNextPlayer
+        
+        
+        CMP     #3, R4
+        JEQ     toggleMode
+        
+        CMP     #4, R4
+        JEQ     handleGameState
+        
+        CMP     #6, R4
+        JEQ     resetGame
         
         ; TODO: Add actions between these lines of code
         
         JMP     end_S1Action
         
+;------------------------------------------------------------------------------
 
 moveToIntroLoop:
         MOV     #1, R4                  ; Move to Intro State
 
+        MOV     #4, R6                  ; Set timer to 2 second mode
+        CALL    #SUB_enableTimer        ; Reset and enable timer
+
 
         JMP     end_S1Action
+;------------------------------------------------------------------------------        
+moveToNextPlayer:
+        INC     R5                      ; Increase name index
+        CMP     #8, R5
+        JNE     end_S1Action
+        
+        MOV     #1, R5                  ; Reset Name Index
+        JMP     end_S1Action
+        
+        
+        
+;------------------------------------------------------------------------------
+       
+toggleMode:
+        XOR     #1, R11
+        PUSH.w  R10
+        MOV.w   #mode, R10
+        
+        MOV     modeValues(R11), 5(R10)  ; Change mode to T or P
+        POP.w   R10
+        JMP     end_S1Action
+        
+;------------------------------------------------------------------------------        
+handleGameState:
+        PUSH.w  R11
+        MOV.w   #number, R11
+        CMP     number(R10), 0(R11)     ; Compare current number to first number
+        POP.w   R11
+        JNE     failGame                ; We chose a different number! D:
+        
+        INC     R10                     ; Increase index to the next number
+        
+        CMP     #6, R10                 
+        JEQ     winGame                 ; We reached the end! :)
+
+        CMP     #1, R11                 ; Check if we are playing pro mode
+        JEQ     updateTimerValueForPro
+        
+        MOV     #4, R6                  ; Set timer to 2 second mode
+        JMP     continueGame
+
+updateTimerValueForPro:
+        MOV     proTimerModes(R10), R6  ; Set timer to mode @ index R10
+
+
+continueGame:        
+        CALL    #SUB_resetTimer         ; Reset the timer
+        JMP     end_S1Action            ; We haven't finished yet!
+        
+failGame:
+        MOV     #0, R9                  ; We lost :(
+        JMP     moveToResultState
+        
+winGame:
+        MOV     #1, R9                  ; We won!
+        
+moveToResultState:
+        MOV     #5, R4                  ; Move to result state
+        CALL    #SUB_disableTimer       ; Reset and disable the timer
+        JMP     end_S1Action
+        
+;------------------------------------------------------------------------------
+    
+resetGame:
+        CALL    #reset
+        ; TODO: Store High score in FRAM?
         
 
 end_S1Action:        
@@ -374,6 +463,34 @@ reset:
                                         ; * 0 = Lose :(
                                         ; * 1 = Win  :)
 
+        MOV     #0, R10                 ; R10 = Current Game Number
+                                        ; * 0 = First Number
+                                        ; * ...
+                                        ; * 5 = Last Number
+  
+        MOV     #0, R11                 ; R11 = Game Mode
+                                        ; * 0 = Test
+                                        ; * 1 = Pro
+
+        CALL    #SUB_disableTimer       ; Reset and Disable the timer
+
+        RET
+
+;------------------------------------------------------------------------------
+SUB_resetTimer:
+        MOV     #0, R7                  ; Reset Counter
+        RET
+
+SUB_disableTimer:
+        CALL    #SUB_resetTimer         ; Reset Timer
+        BIC     #CCIE, &TA0CCTL0        ; Disable TACCR0 interrupt
+                                        ; This turns off the timer
+        RET
+        
+SUB_enableTimer:
+        CALL    #SUB_resetTimer         ; Reset Timer
+        BIS     #CCIE, &TA0CCTL0        ; Disable TACCR0 interrupt
+                                        ; This turns off the timer
         RET
         
 
@@ -408,9 +525,13 @@ next:   ; Decrease R7 all the way to 0
 ISR_TIMER_A0:
 
         INC     R7                      ; Increase the counter
+        PUSH.w    R12
 
-        CMP     countsNeeded(R6), R7   
+        MOV.b   countsNeeded(R6), R12
+        CMP.b   R12, R7   
+        POP.w     R12
         JNE     end_timer_interrupt     ; Ignore the current interrupt
+
         
         ; We reached the needed cycles
         CALL    #SUB_timerAction        ; name pending

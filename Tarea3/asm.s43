@@ -53,12 +53,12 @@ names           DB      ricard, jann, isabel, vandie, dracir, uimerf, oravan
 ; Misc. Titles
 kasino          DB      10, 0, 18, 8, 13, 14
 record          DB      17, 4, 2, 14, 17, 3
-test            DB      19, 4, 18, 19, 26, 26       
+test            DB      19, 4, 18, 19, 26, 26    
+pro             DB      15, 17, 14, 26, 26, 26
 player          DB      15, 11, 0, 24, 4, 17
 mode            DB      12, 14, 3, 4, 26, 26    ; NOTE: To make Y/N appear after mode
                                                 ; edit @mode+5 (the final position)
 
-pro             DB      15, 17, 14, 26, 26, 26
 s2clr           DB      18, 32, 2, 11, 17, 26
 perdio          DB      15, 4, 17, 3, 8, 14
 gano            DB      6, 0, 13, 14, 26, 26
@@ -81,9 +81,7 @@ countsNeeded    DB      1,    2,    4,   8, 16, 40
 
 init:   MOV     #SFE(CSTACK), SP        ; set up stack
 
-main:   NOP                             ; main program
-        MOV.W   #WDTPW+WDTHOLD,&WDTCTL  ; Stop watchdog timer
-
+        ; === Port Settings ===
 
         ; Port 1 Setup
         bis.b   #011111001B, &P1DIR     ; Port 1.1 & Port 1.2 for button input, all other as output
@@ -101,11 +99,12 @@ main:   NOP                             ; main program
 	bis.b   #011111111B, &P9DIR     ; All Port 9 pins as output
 
 
-
-UnlockGPIO:
         bic.w   #LOCKLPM5,&PM5CTL0      ; Disable the GPIO power-on default
                                         ; high-impedance mode to activate
                                         ; previously configured port settings
+
+        ; === LCD Settings ===
+
         ; Enable LCD segments: 0-21, 26-43
         MOV     #0xFFFF, &LCDCPCTL0     ; 1111111111111111
         MOV     #0xFC3F, &LCDCPCTL1     ; 1111110000111111
@@ -118,17 +117,11 @@ UnlockGPIO:
         MOV     #2, &LCDCMEMCTL         ; clear LCD memory (resets screen)
         BIS     #1, &LCDCCTL0            ; turn the LCD on
 
-beginProgram:        
-        CALL    #reset
-        
-        BIC     #CCIE, &TA0CCTL0        ; Enable TACCR0 interrupt; TODO: check if needed :)
-        ; Display title screen
-        MOV.w   #kasino, R10
-        CALL    #SUB_displayStringOnLCD
-        
 
-        ;Turn on the timer.
-        MOV     #CCIE, &TA0CCTL0        ; Enable TACCR0 interrupt
+        ; === Timer Settings ===
+
+        BIC     #CCIE, &TA0CCTL0        ; Disable TACCR0 interrupt
+                                        ; This turns off the timer
 
         mov     #TASSEL_2+MC_1+ID_3, &TA0CTL  ;Set timer according to next table
 	nop
@@ -150,11 +143,26 @@ beginProgram:
                                         ; avoid responding to a push on button
                                         ; previous to program start.
 
-	nop				; required befor enabling interrupts
+
+
+main:   NOP                             ; main program
+        MOV.W   #WDTPW+WDTHOLD,&WDTCTL  ; Stop watchdog timer  
+
+        ; TODO: Maybe we can handle displays here instead of in interrupts?
+        ; Interrupts should halt program flow: not control it.
+        ; Investigate :)
+        CALL    #reset
+         
+        ; Display title screen
+        MOV.w   #kasino, R10
+        CALL    #SUB_displayStringOnLCD
+        
+        nop				; required befor enabling interrupts
 
         bis     #GIE+LPM0, SR           ; Enable interrupts and enter Low Power mode 0
                                         ; that doesn't disable timers
         nop                             ; Required after enabling interrupts
+        
 
 endProgram:
         JMP $                           ; jump to current location '$'

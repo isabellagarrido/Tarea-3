@@ -107,7 +107,7 @@ init:   MOV     #SFE(CSTACK), SP        ; set up stack
 
 
         ; Port 9 Setup
-        bis.b 	#10000000b, P9OUT       ; Turn on green LED
+        bis.b 	#10000000b, &P9OUT       ; Turn on green LED
 	bis.b   #011111111B, &P9DIR     ; All Port 9 pins as output
 
 
@@ -160,17 +160,12 @@ init:   MOV     #SFE(CSTACK), SP        ; set up stack
 main:   NOP                             ; main program
         MOV.W   #WDTPW+WDTHOLD,&WDTCTL  ; Stop watchdog timer  
 
-        ; TODO: Maybe we can handle displays here instead of in interrupts?
-        ; Interrupts should halt program flow: not control it.
-        ; Investigate :)
-        CALL    #reset
-         
-        ; Display title screen
-        
+        CALL    #reset                  ; Reset values
+                 
 mainLoop:
-        CALL    #SUB_displayCurrentPage
+        CALL    #SUB_displayCurrentPage ; Display Current Page
         
-        nop				; required befor enabling interrupts
+        nop				; required before enabling interrupts
 
         bis     #GIE+LPM0, SR           ; Enable interrupts and enter Low Power mode 0
                                         ; that doesn't disable timers
@@ -178,10 +173,6 @@ mainLoop:
 
         JMP     mainLoop
         
-
-endProgram:
-        JMP $                           ; jump to current location '$'
-        NOP                             ; (endless loop)
 
 
 ;------------------------------------------------------------------------------
@@ -423,6 +414,7 @@ ISR_TIMER_A0:
       
 end_timer_interrupt: 
         BIC.w     #LPM0, 0(SP)             ; Exit Low Power mode 0
+        XOR.b     #BIT7, &P9OUT
         RETI
 
 ;------------------------------------------------------------------------------
@@ -492,5 +484,8 @@ end_ISR_Port1
         BIC.w   #LPM0, 0(SP)           ; Exit Low Power mode 0
 	reti
 ;------------------------------------------------------------------------------
-        
-END
+    
+endProgram:
+        JMP $                           ; jump to current location '$'
+        NOP                             ; (endless loop)    
+        END

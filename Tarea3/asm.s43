@@ -161,22 +161,23 @@ main:   NOP                             ; main program
         MOV.W   #WDTPW+WDTHOLD,&WDTCTL  ; Stop watchdog timer  
 
         CALL    #reset                  ; Reset values
-                 
-mainLoop:
-        CALL    #SUB_displayCurrentPage ; Display Current Page
-        
+                         
         nop				; required before enabling interrupts
 
         bis     #GIE+LPM0, SR           ; Enable interrupts and enter Low Power mode 0
                                         ; that doesn't disable timers
-        nop                             ; Required after enabling interrupts
 
-        JMP     mainLoop
+        nop                             ; Required after enabling interrupts
+          
+          
+        ; At this point, the MSP430 is now in low power mode
+        ; and can only handle interrupts.
+        ; Because of this, all code should be handled using interrupts
         
 
 
 ;------------------------------------------------------------------------------
-SUB_displayCurrentPage:
+SUB_updateCurrentPage:
         
         PUSH.w  R10                     ; Preserve the original value of R10
                                         ; R10 will contain the page that we want to render
@@ -329,6 +330,10 @@ SUB_S2Action:
 
 SUB_timerAction:
         ; TODO: implement
+        XOR.b     #BIT7, &P9OUT                 ; Toggle the Green LED
+
+
+        CALL      #SUB_updateCurrentPage       ; Update the page AFTER we performed our action
         RET
 
 ;------------------------------------------------------------------------------
@@ -413,8 +418,6 @@ ISR_TIMER_A0:
         
       
 end_timer_interrupt: 
-        BIC.w     #LPM0, 0(SP)             ; Exit Low Power mode 0
-        XOR.b     #BIT7, &P9OUT
         RETI
 
 ;------------------------------------------------------------------------------
@@ -481,11 +484,11 @@ callButton2Action:
 
 end_ISR_Port1
         POP.w   R10                     ; Restore original value of R10
-        BIC.w   #LPM0, 0(SP)           ; Exit Low Power mode 0
+        CALL    #SUB_updateCurrentPage       ; Update the page AFTER we performed our action
 	reti
 ;------------------------------------------------------------------------------
-    
-endProgram:
+   
+endProgram:                             ; Theoretically should never run
         JMP $                           ; jump to current location '$'
         NOP                             ; (endless loop)    
         END

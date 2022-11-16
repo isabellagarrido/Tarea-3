@@ -47,8 +47,6 @@ dracir          DB      3, 17, 0, 2, 8, 17
 uimerf          DB      20, 8, 12, 4, 17, 5
 oravan          DB      16, 17, 0, 21, 0, 13
 
-; Array of string addresses
-names           DB      ricard, jann, isabel, vandie, dracir, uimerf, oravan
 
 ; Misc. Titles
 kasino          DB      10, 0, 18, 8, 13, 14
@@ -63,6 +61,17 @@ s2clr           DB      18, 32, 2, 11, 17, 26
 perdio          DB      15, 4, 17, 3, 8, 14
 gano            DB      6, 0, 13, 14, 26, 26
 
+; Array of string addresses
+;                       0       2       4        6     8        10      11     12
+recordPage      DW      record, ricard, number, test, number                            ; Indexed by R8 * 2
+namePage        DW      player, ricard, jann, isabel, vandie, dracir, uimerf, oravan    ; Indexed by R5 * 2
+resultPage      DW      perdio, gano                                                    ; Indexed by R9 * 2
+
+
+
+;                       0       2           4         6     8       10           12
+pages           DW      kasino, recordPage, namePage, mode, number, resultPage, s2clr   ; Indexed by R4 (R4 must be even)
+
 ; LCD Offsets
 LCD_offsets db 9, 5, 3, 18, 14, 7
 
@@ -73,6 +82,9 @@ S2              db      00000010B
 ; Timer Mode Counts (seconds)
 ;                       1/8   1/4   1/2  1   2   5
 countsNeeded    DB      1,    2,    4,   8, 16, 40
+
+; Game number (0 = 30 ... 9 = 39)
+number          DB      30, 30, 30, 30, 30, 30
 
 
 ;------------------------------------------------------------------------------
@@ -154,14 +166,17 @@ main:   NOP                             ; main program
         CALL    #reset
          
         ; Display title screen
-        MOV.w   #kasino, R10
-        CALL    #SUB_displayStringOnLCD
+        
+mainLoop:
+        CALL    #SUB_displayCurrentPage
         
         nop				; required befor enabling interrupts
 
         bis     #GIE+LPM0, SR           ; Enable interrupts and enter Low Power mode 0
                                         ; that doesn't disable timers
         nop                             ; Required after enabling interrupts
+
+        JMP     mainLoop
         
 
 endProgram:
@@ -169,6 +184,70 @@ endProgram:
         NOP                             ; (endless loop)
 
 
+;------------------------------------------------------------------------------
+SUB_displayCurrentPage:
+        
+        PUSH.w  R10                     ; Preserve the original value of R10
+                                        ; R10 will contain the page that we want to render
+
+        PUSH.w  R11                     ; Preserve the original value of R11
+                                        ; R11 will contain the amount we need to shift R10 by
+
+
+        PUSH.w  R4                      ; Preserve the original value of R4
+                                        ; R4 will be multiplied by 2 to index "pages"
+
+        RLA     R4                      ; Multiply R4 by 2
+
+        MOV.w   pages(R4), R10          ; At this point, R10 is either an address pointing to a string
+                                        ; or an address pointing to array of string pointers
+
+        POP.w   R4                      ; Restore R4's value
+
+        CMP     #1, R4                  ; Record (indexes R10 using R8)
+        JEQ     shiftR10ByR8
+        
+        CMP     #2, R4                  ; Names (indexes R10 using R5)
+        JEQ     shiftR10ByR5
+        
+        CMP     #5, R4                  ; Result (indexes R10 using R9)
+        JEQ     shiftR10ByR9
+        
+        JMP     endDisplay              ; It's an address that points to a string!
+        
+shiftR10ByR8:
+        MOV     R8, R11
+        JMP     shiftLoop
+        
+shiftR10ByR5:
+        MOV     R5, R11
+        JMP     shiftLoop
+        
+shiftR10ByR9:
+        MOV     R9, R11
+
+shiftLoop:
+        CMP     #0, R11
+        JEQ     endLoop
+        
+        
+        INCD    R10                     ; Increase R10 by 2 (since addresses are words)
+                                        ; R10 now points to the next address in the array
+        DEC     R11
+        JMP     shiftLoop
+        
+endLoop:
+        MOV     @R10, R10               ; Turn R10 from an address that points to an address that points to a string
+                                        ; to an address that points to a string
+
+endDisplay:
+      
+        CALL    #SUB_displayStringOnLCD
+        POP.w   R11                    ; Restore R11's value
+        POP.w   R10                    ; Restore R10's value
+        RET
+        
+;------------------------------------------------------------------------------
 ;------------------------------------------------------------------------------
 ; Author: Jann C. Garcia
 ; Date: November 12, 2022
@@ -242,8 +321,6 @@ moveToIntroLoop:
         MOV     #1, R4                  ; Move to Intro State
 
 
-        MOV.w   #record, R10            ; Render "record" on screen
-        CALL    #SUB_displayStringOnLCD
         JMP     end_S1Action
         
 
@@ -275,6 +352,10 @@ reset:
                                         ; * 6 = S2CLR State
 
         MOV     #0, R5                  ; R5 = Name Index
+                                        ; * 0 = "Player"
+                                        ; * 1 = "Ricard"  <-- loop here!
+                                        ; * ...
+                                        ; * 7 = "Oravan"
 
         MOV     #0, R6                  ; R6 = Timer Mode
                                         ; * 0 = 1/8th
@@ -286,7 +367,19 @@ reset:
 
         MOV     #0, R7                  ; R7 = 1/8th of a second counter (counter)[it counts]
 
+        MOV     #0, R8                  ; R8 = Record Page Index
+                                        ; * 0 = "Record"        <-- loop here!
+                                        ; * 1 = Record Holder Name
+                                        ; * 2 = Record Holder Score
+                                        ; * 3 = "Test"
+                                        ; * 4 = Test Record Score
+
+        MOV     #0, R9                  ; R9 = Game Result
+                                        ; * 0 = Lose :(
+                                        ; * 1 = Win  :)
+
         RET
+        
 
 ;------------------------------------------------------------------------------
 
@@ -302,9 +395,9 @@ delay:  ; Used to delay the program
         ; giving the MSP time to handle
         ; button pressed (debouncing)
 
-        PUSH.b    R7                            ; Preserve Original Value                       
+        PUSH.w    R7                            ; Preserve Original Value                       
         CALL    #delayStart
-        POP.b     R7                              ; Restore Original Value
+        POP.w     R7                              ; Restore Original Value
         RET
         
 delayStart:
@@ -329,6 +422,7 @@ ISR_TIMER_A0:
         
       
 end_timer_interrupt: 
+        BIC.w     #LPM0, 0(SP)             ; Exit Low Power mode 0
         RETI
 
 ;------------------------------------------------------------------------------
@@ -395,16 +489,8 @@ callButton2Action:
 
 end_ISR_Port1
         POP.w   R10                     ; Restore original value of R10
+        BIC.w   #LPM0, 0(SP)           ; Exit Low Power mode 0
 	reti
 ;------------------------------------------------------------------------------
-        ; here we would start to display the first introductory loop
-        ; to the game
-        ;using the timer
-        ; (subroutine doesnt exist yet)
-introductoryLoop:
-
-        ret
-
-
-        END
         
+END

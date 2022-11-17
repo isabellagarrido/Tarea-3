@@ -413,6 +413,8 @@ moveToPlayerSelection:
         JMP     end_S2Action            
 
 moveToGameSelection:   
+        CMP     #0, R5
+        JEQ     end_S2Action            ; Ignore "Player" as an option
         MOV     #3, R4                  ; Move to Mode Selection State
         JMP     end_S2Action
 

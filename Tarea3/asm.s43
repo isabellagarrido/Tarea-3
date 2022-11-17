@@ -99,7 +99,7 @@ init:   MOV     #SFE(CSTACK), SP        ; set up stack
 
         ; Port 1 Setup
         bis.b   #011111001B, &P1DIR     ; Port 1.1 & Port 1.2 for button input, all other as output
-        bis.b   #00000001b, &P1OUT      ; Turn on red LED
+        bis.b   #00000001b, &P1OUT      // Turn on red LED. On if timer is on, off otherwise
 
 	bis.b   #00000110B, &P1OUT	; P1.1 Resistor enabled as pullup
         bis.b   #00000110B, &P1REN      ; resistor. Push is read as 0 and else 1
@@ -109,8 +109,8 @@ init:   MOV     #SFE(CSTACK), SP        ; set up stack
 
 
         ; Port 9 Setup
-        bis.b 	#10000000b, &P9OUT       ; Turn on green LED
-	bis.b   #011111111B, &P9DIR     ; All Port 9 pins as output
+        bis.b 	#10000000b, &P9OUT       // Turn on green LED. Toggles every timer action
+	bis.b   #011111111B, &P9DIR     // All Port 9 pins as output
 
 
         bic.w   #LOCKLPM5,&PM5CTL0      ; Disable the GPIO power-on default
@@ -408,18 +408,18 @@ end_S1Action:
 ;------------------------------------------------------------------------------
 
 moveToPlayerSelection:
-        CALL    #SUB_disableTimer
-        MOV     #2, R4
+        CALL    #SUB_disableTimer       ; Disable timer
+        MOV     #2, R4                  ; Move to Player Selection State
+        JMP     end_S2Action            
+
+moveToGameSelection:   
+        MOV     #3, R4                  ; Move to Mode Selection State
         JMP     end_S2Action
 
-moveToGameSelection:
-        MOV     #3, R4
-        JMP     end_S2Action
-
-moveToGameState:
-        CALL    #SUB_enableTimer
-        MOV     #4, R6
-        MOV     #4, R4
+moveToGameState:                        
+        CALL    #SUB_enableTimer        ; Enable timer
+        MOV     #4, R6                  ; Set timer to 2 second delay
+        MOV     #4, R4                  ; Move to Game
         JMP     end_S2Action
 
 clearFRAM:
@@ -455,12 +455,12 @@ SUB_timerAction:
         
 end_TimerAction:
         CALL      #SUB_updateCurrentPage       ; Update the page AFTER we performed our action
-        XOR.b     #BIT7, &P9OUT                 ; Toggle the Green LED
+        XOR.b     #BIT7, &P9OUT         ; Toggle the Green LED
         RET
         
 name_Records:
-        INC     R8
-        CMP     #5, R8
+        INC     R8                      ; Increase Record Index (R8)
+        CMP     #5, R8                  ; Reset to 0 if it reached 5
         JEQ     reset_Eight
         JMP     end_TimerAction
         
@@ -469,24 +469,24 @@ reset_Eight:
         JMP     end_TimerAction
         
 game_State:
-        INC.b     number(R10)
-        CMP.b     #40,  number(R10)
-        JGE     failState
+        INC.b     number(R10)           ; Increase number @ R10
+        CMP.b     #40,  number(R10)     ; Check if number[R10] reached 10
+        JGE     failState                       
         JMP     end_TimerAction
 
 failState:
-        MOV     #0, R9
-        MOV     #5, R6
-        MOV     #5, R4
+        MOV     #0, R9                  ; Game Result: Lose 
+        MOV     #5, R6                  ; Set timer to 5 second delay
+        MOV     #5, R4                  ; Move to result screen
         JMP     end_TimerAction
 
 result_State:
-        MOV     #6, R4
-        CALL    #SUB_disableTimer
+        MOV     #6, R4                  ; Move to S2CLR
+        CALL    #SUB_disableTimer       ; Disable timer
         JMP     end_TimerAction
        
         
-;------------------------------------RESET IS HERE------------------------------------------
+;-------------------------------------------------------------------------------
 reset:
         MOV     #0, R4                  ; R4 = Current State
                                         ; * 0 = Title State
@@ -538,21 +538,19 @@ reset:
         CALL    #SUB_disableTimer       ; Reset and Disable the timer
 
 resetGameDigits:
-        PUSH.w    R13                   ; R13 = game digit index
+        PUSH.w    R13                   ; Preserve R13
         MOV.b     #0, R13
         
 resetLoopDigits:
-        MOV.b     #30, number(R13)
+        MOV.b     #30, number(R13)      ; Reset all values to 0
         INC.b     R13
-        CMP.b     #6, R13
+        CMP.b     #6, R13               ; Loop 6 times
         JL      resetLoopDigits
-        POP.w   R13
         
 resetModeValue:
-        PUSH.w  R13
-        MOV.w   #mode, R13
-        MOV.b   #19, 5(R13)
-        POP.w   R13
+        MOV.w   #mode, R13              ; Move address into R3
+        MOV.b   #19, 5(R13)             ; Set the last char to "T"
+        POP.w   R13                     ; Restore R13
         
         RET
 
@@ -565,12 +563,18 @@ SUB_disableTimer:
         CALL    #SUB_resetTimer         ; Reset Timer
         BIC     #CCIE, &TA0CCTL0        ; Disable TACCR0 interrupt
                                         ; This turns off the timer
+
+        BIC.b   #BIT0, &P1OUT      // Turn off red LED
         RET
         
 SUB_enableTimer:
         CALL    #SUB_resetTimer         ; Reset Timer
         BIS     #CCIE, &TA0CCTL0        ; Disable TACCR0 interrupt
                                         ; This turns off the timer
+
+        BIS.b   #BIT0, &P1OUT      // Turn on red LED
+
+
         RET
 
 

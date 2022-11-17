@@ -375,7 +375,7 @@ handleGameState:
         JMP     continueGame
 
 updateTimerValueForPro:
-        MOV     proTimerModes(R10), R6  ; Set timer to mode @ index R10
+        MOV.b     proTimerModes(R10), R6  ; Set timer to mode @ index R10
 
 
 continueGame:        
@@ -469,7 +469,7 @@ reset_Eight:
         JMP     end_TimerAction
         
 game_State:
-        INC     number(R10)
+        INC.b     number(R10)
         CMP.b     #40,  number(R10)
         JGE     failState
         JMP     end_TimerAction
@@ -502,7 +502,7 @@ reset:
                                         ; * 1 = "Ricard"  <-- loop here!
                                         ; * ...
                                         ; * 7 = "Oravan"
-
+      
         MOV     #0, R6                  ; R6 = Timer Mode
                                         ; * 0 = 1/8th second
                                         ; * 1 = 1/4th second
@@ -533,8 +533,21 @@ reset:
                                         ; * 0 = Test
                                         ; * 1 = Pro
 
+        MOV     #0, R12                 ; R12 = Button State
+
         CALL    #SUB_disableTimer       ; Reset and Disable the timer
 
+resetGameDigits:
+        PUSH.w    R13                   ; R13 = game digit index
+        MOV.b     #0, R13
+        
+resetLoopDigits:
+        MOV.b     #30, number(R13)
+        INC.b     R13
+        CMP.b     #6, R13
+        JL      resetLoopDigits
+        POP.w   R13
+        
         RET
 
 ;------------------------------------------------------------------------------
@@ -553,7 +566,7 @@ SUB_enableTimer:
         BIS     #CCIE, &TA0CCTL0        ; Disable TACCR0 interrupt
                                         ; This turns off the timer
         RET
-        
+
 
 ;------------------------------------------------------------------------------
 
@@ -619,20 +632,19 @@ end_timer_interrupt:
 ; Side Effects: None
 
 ISR_PORT1:   
-
+        
         NOP                            
 	bic.b   #00000110b, &P1IFG	  ;Reset interrupt flag
         NOP  
+        
+        MOV.b   &P1IN, R12               ; Get button state from P1
+        AND.b   #00000110B, R12         ; Apply bit mask to value
 
-        PUSH.w  R10                     ; Store original value of R10
-        MOV.b   &P1IN, R10               ; Get button state from P1
-        AND.b   #00000110B, R10         ; Apply bit mask to value
-
-        CMP.b    S1, R10                 ; Check if S1 was pressed (sets to 0 when pressed)
+        CMP.b    S1, R12                 ; Check if S1 was pressed (sets to 0 when pressed)
         JEQ     callButton1Action
         
         
-        CMP.b    S2, R10                  ; Check if S2 was pressed 
+        CMP.b    S2, R12                  ; Check if S2 was pressed 
         JEQ     callButton2Action
         JMP     end_ISR_Port1
         
@@ -641,10 +653,10 @@ callButton1Action:
         CALL    #delay
         
         ; Check once again. If it's true, it should be correct
-        MOV.b   &P1IN, R10               ; Get button state from P1 
-        AND.b   #00000110B, R10          ; Apply bit mask to value
+        MOV.b   &P1IN, R12               ; Get button state from P1 
+        AND.b   #00000110B, R12          ; Apply bit mask to value
 
-        CMP.b   S1, R10
+        CMP.b   S1, R12
         JEQ     end_ISR_Port1
 
         CALL    #SUB_S1Action
@@ -655,17 +667,16 @@ callButton2Action:
         CALL    #delay
         
         ; Check once again. If it's true, it should be correct
-        MOV.b   &P1IN, R10               ; Get button state from P1 
-        AND.b   #00000110B, R10          ; Apply bit mask to value
+        MOV.b   &P1IN, R12               ; Get button state from P1 
+        AND.b   #00000110B, R12          ; Apply bit mask to value
 
-        CMP.b   S2, R10
+        CMP.b   S2, R12
         JEQ     end_ISR_Port1
         
         CALL    #SUB_S2Action
 
 
 end_ISR_Port1
-        POP.w   R10                     ; Restore original value of R10
         CALL    #SUB_updateCurrentPage       ; Update the page AFTER we performed our action
 	reti
 ;------------------------------------------------------------------------------

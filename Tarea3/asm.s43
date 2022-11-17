@@ -359,7 +359,7 @@ toggleMode:
 handleGameState:
         PUSH.w  R11
         MOV.w   #number, R11
-        CMP     number(R10), 0(R11)     ; Compare current number to first number
+        CMP.b     number(R10), 0(R11)     ; Compare current number to first number
         POP.w   R11
         JNE     failGame                ; We chose a different number! D:
         
@@ -470,7 +470,7 @@ reset_Eight:
         
 game_State:
         INC     number(R10)
-        CMP     #40,  number(R10)
+        CMP.b     #40,  number(R10)
         JGE     failState
         JMP     end_TimerAction
 

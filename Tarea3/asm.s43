@@ -323,7 +323,7 @@ SUB_S1Action:
         CMP     #6, R4
         JEQ     resetGame
         
-        ; TODO: Add actions between these lines of code
+        ;DONE
         
         JMP     end_S1Action
         
@@ -395,7 +395,8 @@ winGame:
         
 moveToResultState:
         MOV     #5, R4                  ; Move to result state
-        CALL    #SUB_disableTimer       ; Reset and disable the timer
+        MOV     #5, R6                  ;change freq to 5s
+        CALL    #SUB_enableTimer       ; Reset and disable the timer
         JMP     end_S1Action
         
 ;------------------------------------------------------------------------------
@@ -415,17 +416,54 @@ SUB_S2Action:
         RET
         
         
-;------------------------------------------------------------------------------
+;-------------------------------------TIMER ACTIONS-----------------------------------------
 
 SUB_timerAction:
-        ; TODO: implement
-        XOR.b     #BIT7, &P9OUT                 ; Toggle the Green LED
 
-
+        CMP     #1, R4                          ;checks if page is 1 
+        JEQ     name_Records
+        
+        CMP     #4, R4
+        JEQ     game_State
+        
+        CMP     #5, R4
+        JEQ     result_State 
+        
+        
+end_TimerAction:
         CALL      #SUB_updateCurrentPage       ; Update the page AFTER we performed our action
+        XOR.b     #BIT7, &P9OUT                 ; Toggle the Green LED
         RET
+        
+name_Records:
+        INC     R8
+        CMP     #5, R8
+        JEQ     reset_Eight
+        JMP     end_TimerAction
+        
+reset_Eight:
+        MOV     #0, R8
+        JMP     end_TimerAction
+        
+game_State:
+        INC     number(R10)
+        CMP     #10,  number(R10)
+        JGE     failState
+        JMP     end_TimerAction
 
-;------------------------------------------------------------------------------
+failState:
+        MOV     #0, R9
+        MOV     #5, R6
+        MOV     #5, R4
+        JMP     end_TimerAction
+
+result_State:
+        MOV     #6, R4
+        CALL    #SUB_disableTimer
+        JMP     end_TimerAction
+       
+        
+;------------------------------------RESET IS HERE------------------------------------------
 reset:
         MOV     #0, R4                  ; R4 = Current State
                                         ; * 0 = Title State

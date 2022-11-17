@@ -548,6 +548,12 @@ resetLoopDigits:
         JL      resetLoopDigits
         POP.w   R13
         
+resetModeValue:
+        PUSH.w  R13
+        MOV.w   #mode, R13
+        MOV.b   #19, 5(R13)
+        POP.w   R13
+        
         RET
 
 ;------------------------------------------------------------------------------

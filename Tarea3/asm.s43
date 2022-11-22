@@ -16,11 +16,6 @@
 
         ORG     0x04400                 ; Start of FRAM 
 
-;       00 AF DD D3 D6 F0 3A --> 10, 0, 18, 8, 13, 14 name proScore testScore
-;       
-;
-;
-
 ;------------------------------------------------------------------------------
 ;Letters and Symbols
 ;            A     B     C     D     E     F     G     H     I     J     K     L     M     N     O     P     Q     R     S     T     U     V     W     X     Y     Z   NONE    -     >     ?    30    31    32    33    34    35    36    37    38    39

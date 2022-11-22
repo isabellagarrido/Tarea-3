@@ -14,12 +14,12 @@
         ORG     0FFFEh                  ; vector for RESET
         DC16    init                    ; set reset vector to 'init' label
 
-        ORG     0x01C00                 ; Start of RAM
+        ORG     0x01C00                 ; Start of RAM 
 
-        ORG     01C00h                  
- 
-; pushCount dw    0                       ;Counter for how many times button S1 is pressed
-
+;       00 AF DD D3 D6 F0 3A --> 10, 0, 18, 8, 13, 14 name proScore testScore
+;       
+;
+;
 
 ;------------------------------------------------------------------------------
 ;Letters and Symbols
@@ -42,6 +42,7 @@ ricard          DB      17, 8, 2, 0, 17, 3
 dracir          DB      3, 17, 0, 2, 8, 17
 uimerf          DB      20, 8, 12, 4, 17, 5
 oravan          DB      14, 17, 0, 21, 0, 13
+noName          DB      27, 27, 27, 27, 27, 27
 
 
 ; Misc. Titles
@@ -61,10 +62,13 @@ perdio          DB      15, 4, 17, 3, 8, 14
 gano            DB      6, 0, 13, 14, 26, 26
 
 ; Array of string addresses
-;                       0       2       4        6     8        10      11     12
-recordPage      DW      record, ricard, number, test, number                            ; Indexed by R8 * 2
-namePage        DW      player, ricard, jann, isabel, vandie, dracir, uimerf, oravan    ; Indexed by R5 * 2
-resultPage      DW      perdio, gano                                                    ; Indexed by R9 * 2
+;                       0       2       4           6     8        10    12       14
+recordPage      DW      record, noName, highScore, test, testScore                                 ; Indexed by R8 * 2
+                               ; ^ 
+                               ; |
+                               ; Change value to namePage[nameIndex]; default: noName
+namePage        DW      player, ricard, jann, isabel, vandie, dracir, uimerf, oravan, noName            ; Indexed by R5 * 2
+resultPage      DW      perdio, gano                                                            ; Indexed by R9 * 2
 
 
 
@@ -87,6 +91,9 @@ proTimerModes   DB      4, 4, 3, 2,   1,   0
 
 ; Game number (0 = 30 ... 9 = 39)
 number          DB      30, 30, 30, 30, 30, 30
+
+highScore       DB      26, 26, 26, 26, 26, 30           ; Change highScore+5 w/ FRAM value
+testScore       DB      26, 26, 26, 26, 26, 30           ; Change testScore+5 w/ FRAM value
 
 
 ;------------------------------------------------------------------------------
@@ -298,7 +305,174 @@ displayLoop:
         POP.w   R10
         
         RET
+
+;------------------------------------------------------------------------------
+SUB_validateFRAM:
+        PUSH.w  R10                     ; Preserve R10's value
+                                        ; R10 will be the relative index for FRAM
+                                        ; @ 0x4400
+
+        MOV.b   #0, R10                 ; Start at index 0
         
+        
+validationLoop:
+        ; Check 0x4400 -> 0x4405 for "KASINO" or whatever value we put for validation
+        ; If it matches, load from FRAM
+        
+        CMP.b   kasino(R10), 0x4400(R10)        ; Compare kasino[R10] to FRAM[R10]
+
+        ; If at any point we don't match, we need to reset FRAM
+        JNE     resetFRAM
+
+        INC.b   R10
+
+        CMP.b   #6, R10
+        JL      validationLoop
+        JMP     loadFRAM                        ; If we make it here
+                                                ; that means the validation string
+                                                ; was inside the FRAM
+        
+resetFRAM:
+        CALL    #SUB_resetFRAM
+        
+loadFRAM:
+        CALL    #SUB_loadFromFRAM
+        
+
+
+        POP.w   R10                     ; Restore R10's value
+        RET
+        
+SUB_loadFromFRAM:
+        ; 0x4400 -> 0x4405: Validation String
+        ; 0x4406: Name Index
+        ; 0x4407: Pro Score
+        ; 0x4408: Test Score
+
+
+        ; Loading Name
+        PUSH.w  R10                     ; R10: FRAM index + 6
+        PUSH.w  R11                     ; R11: Address of page to edit
+        PUSH.w  R12                     ; R12: FRAM value @ 0x4406
+
+        MOV.b   #6, R10 
+        MOV.w   #recordPage, R11    
+        MOV.b   0x4400(R10), R12        ; R12 now contains the VALUE at 0x4406
+
+        RLA     R12                     ; Multiply R12 by 2
+        
+        
+        MOV.w   namePage(R12), 2(R11)
+        
+        ; Loading Scores
+        INC.b   R10                     ; R10 now points to 0x4407
+        MOV.w   #testScore, R11
+        MOV.b   0x4400(R10), 5(R11)     ; Loading Test Score
+
+       
+        INC.b   R10                     ; R10 points to 0x4408
+        MOV.w   #highScore, R11
+        MOV.b   0x4400(R10), 5(R11)     ; Loading Pro Score
+        
+        
+        ; Load namePage[2 * value @ 0x4406] into recordPage[2 * 1]
+        ; Load value @ 0x4407 into highScore[5]
+        
+        POP.w   R12
+        POP.w   R11
+        POP.w   R10
+        RET
+
+SUB_resetFRAM: ; Will be called ONLY on first program run AND S2CLR
+        ; 0x4400 -> 0x4405: Validation String
+        ; 0x4406: Name Index
+        ; 0x4407: Test Score
+        ; 0x4408: Pro Score
+
+        PUSH.w  R10
+
+        MOV.b   #0, R10                 ; R10 = FRAM Index
+
+       
+
+stringLoop:
+        ; Set the validation string
+        MOV.b   kasino(R10), 0x4400(R10)
+        INC.b   R10
+        CMP.b   #6, R10
+        JL      stringLoop
+        
+        ; R10 == 6
+        MOV.b   #8, 0x4400(R10)         ; This will reset the name INDEX to "noName"
+
+        INC.b   R10
+        
+        ; R10 == 7
+        MOV.b   #30, 0x4400(R10)         ; Reset Test Score to 30 (0 in char array)
+        INC.b   R10
+    
+        ; R10 == 8
+        MOV.b   #30, 0x4400(R10)        ; Reset Pro Score to 30
+        
+
+
+        POP.w  R10
+        RET
+        
+SUB_saveToFRAM:
+
+        
+        ; R5 = Player Index
+        ; R10 = Score (not 30-based)
+        ; R11 = Game Mode
+
+        PUSH.w  R5
+        PUSH.w  R12                     ; The score to compare to (testScore[5] if R11 == 0, highScore[5] if R11 == 1)
+
+        CMP.b   #0, R11                 ; Check what game mode we are on
+        JEQ     loadTestScore
+               
+        MOV.w   #highScore, R12
+        JMP     compare
+        
+loadTestScore
+        MOV.w   #testScore, R12
+        
+compare:
+        ADD.b   #30, R10                 ; Make score 30-based
+        CMP.b   5(R12), R10
+        JL      endSave
+        
+        ; Update the score
+        MOV.b   R10, 0x4407(R11)         ; Save 30-based R10 into FRAM
+                                        ; using the game mode as an index
+
+        CMP.b   #1, R11
+        JEQ     saveName                ; Save name only in pro mode
+        JMP     endSave
+        
+saveName:
+        MOV.w   #0x4406, R12
+        MOV.b   R5, 0(R12)              ; Move name into 0x4406
+
+endSave:
+        POP.w   R12
+        POP.w   R5
+        RET
+        
+
+        ; Comparisons to make before saving:
+        ; * If gamemode == "pro"
+        ;       * If proScore[5] < score + 30
+        ;               * Save score to FRAM (0x4407)
+        ;               * Save R5 to FRAM (0x4406)
+
+        ; * Else:
+        ;       * If testScore[5] < score + 30
+        ;               * Save score to FRAM (0x4408)
+        ;               * Save R5 to FRAM (0x4406)
+
+
         
 ;------------------------------------------------------------------------------
 SUB_S1Action:
@@ -392,6 +566,7 @@ winGame:
 moveToResultState:
         MOV     #5, R4                  ; Move to result state
         MOV     #5, R6                  ;change freq to 5s
+        CALL    #SUB_saveToFRAM         ; Save Score
         CALL    #SUB_enableTimer       ; Reset and disable the timer
         JMP     end_S1Action
         
@@ -425,7 +600,7 @@ moveToGameState:
         JMP     end_S2Action
 
 clearFRAM:
-        ;TODO: clear FRAM
+        CALL    #SUB_resetFRAM
         JMP     end_S2Action
      
 SUB_S2Action:
@@ -480,6 +655,7 @@ failState:
         MOV     #0, R9                  ; Game Result: Lose 
         MOV     #5, R6                  ; Set timer to 5 second delay
         MOV     #5, R4                  ; Move to result screen
+        CALL    #SUB_saveToFRAM         ; Save Score
         JMP     end_TimerAction
 
 result_State:
@@ -536,6 +712,8 @@ reset:
                                         ; * 1 = Pro
 
         MOV     #0, R12                 ; R12 = Button State
+
+        CALL    #SUB_validateFRAM       ; Validate & Reset if needed
 
         CALL    #SUB_disableTimer       ; Reset and Disable the timer
 

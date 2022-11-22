@@ -14,7 +14,7 @@
         ORG     0FFFEh                  ; vector for RESET
         DC16    init                    ; set reset vector to 'init' label
 
-        ORG     0x01C00                 ; Start of RAM 
+        ORG     0x04400                 ; Start of FRAM 
 
 ;       00 AF DD D3 D6 F0 3A --> 10, 0, 18, 8, 13, 14 name proScore testScore
 ;       
@@ -94,6 +94,8 @@ number          DB      30, 30, 30, 30, 30, 30
 
 highScore       DB      26, 26, 26, 26, 26, 30           ; Change highScore+5 w/ FRAM value
 testScore       DB      26, 26, 26, 26, 26, 30           ; Change testScore+5 w/ FRAM value
+
+                ORG     0x1C00                          ; Start at RAM
 
 
 ;------------------------------------------------------------------------------
@@ -310,7 +312,7 @@ displayLoop:
 SUB_validateFRAM:
         PUSH.w  R10                     ; Preserve R10's value
                                         ; R10 will be the relative index for FRAM
-                                        ; @ 0x4400
+                                        ; @ 0x4800
 
         MOV.b   #0, R10                 ; Start at index 0
         
@@ -319,7 +321,7 @@ validationLoop:
         ; Check 0x4400 -> 0x4405 for "KASINO" or whatever value we put for validation
         ; If it matches, load from FRAM
         
-        CMP.b   kasino(R10), 0x4400(R10)        ; Compare kasino[R10] to FRAM[R10]
+        CMP.b   kasino(R10), 0x9000(R10)        ; Compare kasino[R10] to FRAM[R10]
 
         ; If at any point we don't match, we need to reset FRAM
         JNE     resetFRAM
@@ -357,7 +359,7 @@ SUB_loadFromFRAM:
 
         MOV.b   #6, R10 
         MOV.w   #recordPage, R11    
-        MOV.b   0x4400(R10), R12        ; R12 now contains the VALUE at 0x4406
+        MOV.b   0x9000(R10), R12        ; R12 now contains the VALUE at 0x4406
 
         RLA     R12                     ; Multiply R12 by 2
         
@@ -367,12 +369,12 @@ SUB_loadFromFRAM:
         ; Loading Scores
         INC.b   R10                     ; R10 now points to 0x4407
         MOV.w   #testScore, R11
-        MOV.b   0x4400(R10), 5(R11)     ; Loading Test Score
+        MOV.b   0x9000(R10), 5(R11)     ; Loading Test Score
 
        
         INC.b   R10                     ; R10 points to 0x4408
         MOV.w   #highScore, R11
-        MOV.b   0x4400(R10), 5(R11)     ; Loading Pro Score
+        MOV.b   0x9000(R10), 5(R11)     ; Loading Pro Score
         
         
         ; Load namePage[2 * value @ 0x4406] into recordPage[2 * 1]
@@ -397,22 +399,22 @@ SUB_resetFRAM: ; Will be called ONLY on first program run AND S2CLR
 
 stringLoop:
         ; Set the validation string
-        MOV.b   kasino(R10), 0x4400(R10)
+        MOV.b   kasino(R10), 0x9000(R10)
         INC.b   R10
         CMP.b   #6, R10
         JL      stringLoop
         
         ; R10 == 6
-        MOV.b   #8, 0x4400(R10)         ; This will reset the name INDEX to "noName"
+        MOV.b   #8, 0x9000(R10)         ; This will reset the name INDEX to "noName"
 
         INC.b   R10
         
         ; R10 == 7
-        MOV.b   #30, 0x4400(R10)         ; Reset Test Score to 30 (0 in char array)
+        MOV.b   #30, 0x9000(R10)         ; Reset Test Score to 30 (0 in char array)
         INC.b   R10
     
         ; R10 == 8
-        MOV.b   #30, 0x4400(R10)        ; Reset Pro Score to 30
+        MOV.b   #30, 0x9000(R10)        ; Reset Pro Score to 30
         
 
 
@@ -444,7 +446,7 @@ compare:
         JL      endSave
         
         ; Update the score
-        MOV.b   R10, 0x4407(R11)         ; Save 30-based R10 into FRAM
+        MOV.b   R10, 0x9007(R11)         ; Save 30-based R10 into FRAM
                                         ; using the game mode as an index
 
         CMP.b   #1, R11
@@ -452,7 +454,7 @@ compare:
         JMP     endSave
         
 saveName:
-        MOV.w   #0x4406, R12
+        MOV.w   #0x9006, R12
         MOV.b   R5, 0(R12)              ; Move name into 0x4406
 
 endSave:

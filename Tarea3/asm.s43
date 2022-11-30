@@ -1,5 +1,13 @@
-#include "msp430.h"                     ; #define controlled include file
 
+#include "msp430.h"                     ; #define controlled include file
+/*
+                      Ricardo Garcia 
+                       802-16-2434
+                       Jann Garcia
+                       802-19-2800
+                      Isabella Garrido
+                       802-19-9609
+*/
         NAME    main                    ; module name
 
         PUBLIC  main                    ; make the main label vissible
@@ -749,7 +757,18 @@ failState:
         MOV     #0, R9                  ; Game Result: Lose 
         MOV     #5, R6                  ; Set timer to 5 second delay
         MOV     #5, R4                  ; Move to result screen
+       
+        CMP     #0, R10                 ; validate that score isn't 0
+        JEQ     failScore                   
+        
         CALL    #SUB_saveToFRAM         ; Save Score
+        JMP     end_TimerAction
+        
+        
+failScore:
+        MOV     #1, R10                  
+        CALL    #SUB_saveToFRAM         ; Save Score
+
         JMP     end_TimerAction
 
 result_State:
